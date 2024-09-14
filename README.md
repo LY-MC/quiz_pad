@@ -6,7 +6,7 @@ In the multiplayer quiz game many users can join simultaneously and if we are ta
 2. User Management Service - manages user authentication, profiles and leaderboards
 3. Game Engine Service - handles the quiz game logic, scoring and gameplay sessions
 
-![Screenshot 2024-09-14 002150](https://github.com/user-attachments/assets/cd7e1f5c-cdfe-49e3-9233-16cc1dcecae8)
+![image](https://github.com/user-attachments/assets/372553dd-8802-46d3-8d17-9b517f87049d)
 
 Load Balancer is used to distribute incoming requests across multiple instances of services for better performance and reliability.
 Service Discovery is used to allow microservices to find and communicate with each other dynamically.
@@ -71,22 +71,6 @@ Framework - Node.js with Express.js
     "status": "string"
   }
   ```
-* POST /submit-answer
-  * Request Body
-  ```
-  {
-    "game_id": "string",
-    "user_id": "string",
-    "answer": "string"
-  }
-  ```
-  * Response
-  ```
-  {
-    "correct": "boolean",
-    "current_score": "integer"
-  }
-  ```
 * GET /game-status/:id
   * Response
   ```
@@ -114,6 +98,13 @@ Framework - Node.js with Express.js
         ]
       }
     ]
+  }
+  ```
+* WebSocket /game/submit-answer (Opens a WebSocket connection for submitting answers in the Game Engine Service)
+  The client opens a WebSocket connection to /game/submit-answer, passing the game_id and JWT token as query parameters (e.g., ws://gameengine.com/game/submit-answer?game_id=GAME_ID&token=JWT-TOKEN).
+  ```
+  {
+    "answer": "string"
   }
   ```
 
