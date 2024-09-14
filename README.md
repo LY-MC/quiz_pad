@@ -6,7 +6,7 @@ In the multiplayer quiz game many users can join simultaneously and if we are ta
 2. User Management Service - manages user authentication, profiles and leaderboards
 3. Game Engine Service - handles the quiz game logic, scoring and gameplay sessions
 
-![image](https://github.com/user-attachments/assets/9056f079-357d-4184-96cc-7e20ea82c745)
+![image](https://github.com/user-attachments/assets/a8eb279b-eff9-4b45-a251-8c4455ea5692)
 
 Load Balancer is used to distribute incoming requests across multiple instances of services for better performance and reliability.
 Service Discovery is used to allow microservices to find and communicate with each other dynamically.
