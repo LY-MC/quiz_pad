@@ -1,6 +1,6 @@
 # Multiplayer quiz game
 ## Application Suitability
-In the multiplayer quiz game many users can join simultaneously and if we are talking about the scalanility as more users join the quiz game, the system must handle an increasing number of game sessions, real-time updates, and user interactions without compromising performance. For example, Kahoot uses microservices to handle its quizzes, allowing millions of players to participate simultaneously by independently scaling each component (real-time game sessions, question fetching, etc.). Also, Kahoot’s real-time quiz functionality relies on WebSocket communication to broadcast questions and answers, track scores, and update leaderboards instantly, so I can use this as well in my projec (not all of course). The game requires real-time updates and communication between players, which can be efficiently handled using WebSockets in a dedicated service (Game Engine). The API Gateway allows smooth client-server communication. Separation of components leads to fault isolation so even failing of one component doesn't lead to the entire app's failing like if on Netflix (that uses microservices to isolate components) one service (like recommendations) fails, it won’t affect video streaming.
+In the multiplayer quiz game many users can join simultaneously and if we are talking about the scalability as more users join the quiz game, the system must handle an increasing number of game sessions, real-time updates, and user interactions without compromising performance. For example, Kahoot uses microservices to handle its quizzes, allowing millions of players to participate simultaneously by independently scaling each component (real-time game sessions, question fetching, etc.). Also, Kahoot’s real-time quiz functionality relies on WebSocket communication to broadcast questions and answers, track scores, and update leaderboards instantly, so I can use this as well in my project (not all of course). The game requires real-time updates and communication between players, which can be efficiently handled using WebSockets in a dedicated service (Game Engine). The API Gateway allows smooth client-server communication. Separation of components leads to fault isolation so even failing of one component doesn't lead to the entire app's failing like if on Netflix (that uses microservices to isolate components) one service (like recommendations) fails, it won’t affect video streaming.
 ## Service Boundaries
 1. API Gateway - acts as the single point of entry for client requests, routing the system to User Management Service or Game Engine Service and also handling WebSocket connections
 2. User Management Service - manages user authentication, profiles and leaderboards
@@ -44,13 +44,15 @@ Framework - Node.js with Express.js
     "auth_token": "string"
     }
   ```
-* GET /profile/:id
+* GET /user/:id
   * Response
   ```
    {
     "user_id": "string",
     "username": "string",
-    "score_history": []
+    "score_history": [],
+    "place": "integer",
+    "score" : "integer",
   }
   ```
 2. Game Engine Service:
