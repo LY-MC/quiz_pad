@@ -1,3 +1,6 @@
 flask
 flask-socketio
 pymongo
+gunicorn
+requests
+uuid

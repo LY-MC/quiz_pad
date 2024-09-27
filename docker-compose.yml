@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: ./gateway
+    ports:
+      - "5000:5000"
+    depends_on:
+      - user_management_service
+      - game_engine_service
+      - redis
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+
+  gamesdb:
+    image: mongo:latest
+    container_name: gamesdb
+    ports:
+      - "27018:27017"
+    volumes:
+      - ./data/gamesdb:/data/db
+
+  user_management_service:
+    build: ./user_management_service
+    ports:
+      - "5002:5002"
+    depends_on:
+      - mongodb
+    environment:
+      MONGO_URL: mongodb://mongodb:27017
+    command: gunicorn -b 0.0.0.0:5002 -w 2 --timeout 120 app:app
+
+  game_engine_service:
+    build: ./game_engine_service
+    ports:
+      - "5003:5003"
+    depends_on:
+      - gamesdb
+    environment:
+      MONGO_URL: mongodb://gamesdb:27017
+    command: gunicorn -b 0.0.0.0:5003 -w 2 --timeout 120 app:app
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  mongo_data: {}
+  gamesdb_data: {}

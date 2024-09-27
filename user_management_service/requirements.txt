@@ -1,2 +1,4 @@
 flask
-jwt
+gunicorn
+pymongo
+uuid

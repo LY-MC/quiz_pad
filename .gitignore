@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.idea
 
 # Distribution / packaging
 build/
@@ -26,3 +27,6 @@ mongod.lock
 
 # Virtual environments
 venv/
+
+local_dump
+data
