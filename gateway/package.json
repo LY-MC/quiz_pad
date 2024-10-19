@@ -6,10 +6,11 @@
   "scripts": {
     "start": "node server.js"
   },
-    "dependencies": {
+  "dependencies": {
     "express": "^4.17.1",
     "http-proxy-middleware": "^1.0.6",
-    "redis": "^4.6.7"
+    "redis": "^4.6.7",
+    "opossum": "^5.0.0"
   },
   "private": true
 }
