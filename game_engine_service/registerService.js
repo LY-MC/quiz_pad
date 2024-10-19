@@ -1,9 +1,9 @@
 const axios = require('axios');
 
-const serviceId = process.env.SERVICE_ID || 'user_management_service';
-const serviceName = process.env.SERVICE_NAME || 'user_management_service';
-const serviceAddress = process.env.SERVICE_ADDRESS || 'user_management_service';  
-const servicePort = parseInt(process.env.SERVICE_PORT, 10) || 5002;
+const serviceId = process.env.SERVICE_ID || 'game_engine_service';
+const serviceName = process.env.SERVICE_NAME || 'game_engine_service';
+const serviceAddress = process.env.SERVICE_ADDRESS || 'game_engine_service';  
+const servicePort = parseInt(process.env.SERVICE_PORT, 10) || 5003;
 
 const registerService = async () => {
   try {

@@ -2,3 +2,6 @@ flask
 gunicorn
 pymongo
 uuid
+flask-socketio
+requests
+websocket-client

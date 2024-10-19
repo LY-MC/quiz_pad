@@ -1,16 +1,21 @@
+import eventlet
+eventlet.monkey_patch()
+
+import time
+import logging
 from flask import Flask, jsonify, request
-from flask_socketio import SocketIO, emit
 from pymongo import MongoClient
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import uuid
 from functools import wraps
 from collections import deque
 from datetime import datetime, timedelta
+from flask_socketio import SocketIO, send, join_room
 
 USER_SERVICE_URL = "http://user_management_service:5002"
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
 client = MongoClient('mongodb://gamesdb:27017')
 db = client['quiz_game_db']
@@ -27,7 +32,7 @@ def run_with_timeout(func, *args, timeout=5):
     try:
         return future.result(timeout=timeout)
     except TimeoutError:
-        raise TimeoutException("Task timeout exceeded")
+        raise TimeoutException()
 
 DEFAULT_TIMEOUT = 5
 
@@ -82,6 +87,7 @@ def health():
 @app.route('/game/status', methods=['GET'])
 @circuit_breaker.call
 def status():
+    time.sleep(200)
     return jsonify({
         "status": "Service is running",
         "service": "Game Engine Service",
@@ -111,16 +117,30 @@ def start_game():
         "game": game_data
     }), 200
 
-@app.route('/game/join/<game_id>/<user_id>', methods=['POST'])
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Global dictionary to manage game rooms
+game_rooms = {}
+
+@socketio.on('join_game')
 @circuit_breaker.call
-def join_game(game_id, user_id):
+def join_game(data):
+    game_id = data['game_id']
+    user_id = data['user_id']
+    sid = request.sid
     game = games_collection.find_one({"_id": game_id})
+    logging.debug(f"Initial game rooms state: {game_rooms}")
+
     if not game:
-        return jsonify({"error": "Game not found"}), 404
+        send({"error": "Game not found"}, room=sid)
+        return
 
     if user_id in game['players_scores']:
-        return jsonify({"message": "User already in the game"}), 200
+        send({"message": "User already in the game"}, room=sid)
+        return
 
+    # Update player scores in the database
     games_collection.update_one(
         {"_id": game_id},
         {"$set": {f"players_scores.{user_id}": 0}}
@@ -128,16 +148,21 @@ def join_game(game_id, user_id):
 
     updated_game = games_collection.find_one({"_id": game_id})
 
-    # Notify all clients that a new user has joined the game
-    print("Emitting user_joined event")  # Debug print statement
-    socketio.emit('user_joined', {
-        "message": "User joined the game!",
-        "game_id": game_id,
-        "user_id": user_id,
-        "players_scores": updated_game['players_scores']
-    })
+    # Ensure game_rooms has an entry for the game_id
+    game_rooms.setdefault(game_id, []).append(sid)
+        
+    # Log the current state of game rooms
+    logging.debug(f"Current game rooms: {game_rooms}")
 
-    return jsonify({"message": "User joined the game!", "game": updated_game}), 200
+    # Send a message to the new user
+    send({"message": "You joined the game!", "game": updated_game}, room=sid)
+
+    # Notify all connected users in the room that a new player has joined
+    message = f"User {user_id} joined the game!"
+    for user_sid in game_rooms[game_id]:
+        if user_sid != sid:  # Avoid sending the message back to the new user
+            send({"message": message, "game": updated_game}, room=user_sid)
+
 
 @app.route('/game/game-status/<game_id>', methods=['GET'])
 @circuit_breaker.call
@@ -151,25 +176,22 @@ def get_game_status(game_id):
         "players_scores": game['players_scores']
     }), 200
 
-@app.route('/game/post-question', methods=['POST'])
+@socketio.on('post_question')
 @circuit_breaker.call
-def post_question():
-    question_data = request.json
+def post_question(data):
+    game_id = data['game_id']
+    question_data = data['question_data']
 
     required_fields = ['question', 'options', 'correct_answer']
     for field in required_fields:
         if field not in question_data:
-            return jsonify({"error": f"{field} is required."}), 400
+            send({"error": f"{field} is required."}, room=request.sid)
+            return
 
     question_data['_id'] = str(uuid.uuid4())
     questions_collection.insert_one(question_data)
 
-    socketio.emit('new_question', {
-        "message": "New question posted!",
-        "question": question_data
-    })
-
-    return jsonify({"message": "Question posted successfully!", "question": question_data}), 201
+    send({"message": "Question posted successfully!", "question": question_data}, room=game_id)
 
 @app.route('/game/submit-answer/<game_id>/<user_id>/<question_id>', methods=['POST'])
 @circuit_breaker.call
@@ -177,7 +199,6 @@ def submit_answer(game_id, user_id, question_id):
     data = request.json
     submitted_answer = data.get('answer')
 
-    # Retrieve the game from the database
     game = games_collection.find_one({"_id": game_id})
     if not game:
         return jsonify({"error": "Game not found"}), 404
@@ -197,22 +218,8 @@ def submit_answer(game_id, user_id, question_id):
         )
         updated_game = games_collection.find_one({"_id": game_id})
 
-        socketio.emit('answer_submitted', {
-            "message": "Correct answer!",
-            "game_id": game_id,
-            "user_id": user_id,
-            "new_score": updated_game['players_scores'][user_id]
-        })
-
         return jsonify({"message": "Correct answer!", "new_score": updated_game['players_scores'][user_id]}), 200
     else:
-        # Notify all clients about the incorrect answer
-        socketio.emit('answer_submitted', {
-            "message": "Incorrect answer.",
-            "game_id": game_id,
-            "user_id": user_id
-        })
-
         return jsonify({"message": "Incorrect answer."}), 200
 
 @app.route('/game/questions', methods=['GET'])
