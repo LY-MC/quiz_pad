@@ -11,6 +11,7 @@ from functools import wraps
 from collections import deque
 from datetime import datetime, timedelta
 from flask_socketio import SocketIO, send, join_room
+import signal
 
 USER_SERVICE_URL = "http://user_management_service:5002"
 
@@ -27,22 +28,19 @@ executor = ThreadPoolExecutor(max_workers=2)
 class TimeoutException(Exception):
     pass
 
-def run_with_timeout(func, *args, timeout=5):
-    future = executor.submit(func, *args)
-    try:
-        return future.result(timeout=timeout)
-    except TimeoutError:
-        raise TimeoutException()
-
-DEFAULT_TIMEOUT = 5
-
-@app.errorhandler(TimeoutException)
-def handle_timeout_error(e):
-    return jsonify({"error": str(e)}), 503
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    return jsonify({"error": str(e)}), 500
+def timeout_decorator(timeout):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            signal.alarm(timeout)
+            try:
+                return func(*args, **kwargs)
+            except TimeoutException:
+                return "Task timeout exceeded", 503
+            finally:
+                signal.alarm(0)
+        return wrapper
+    return decorator
 
 class CircuitBreaker:
     def __init__(self, failure_threshold, recovery_timeout):
@@ -78,7 +76,7 @@ class CircuitBreaker:
                 raise e
         return wrapper
 
-circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=int(DEFAULT_TIMEOUT * 3.5))
+circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=int(5 * 3.5))
 
 @app.route('/health')
 def health():
@@ -86,8 +84,9 @@ def health():
 
 @app.route('/game/status', methods=['GET'])
 @circuit_breaker.call
+@timeout_decorator(3)
 def status():
-    time.sleep(200)
+    # time.sleep(200)
     return jsonify({
         "status": "Service is running",
         "service": "Game Engine Service",
@@ -96,6 +95,7 @@ def status():
 
 @app.route('/game/start-game', methods=['POST'])
 @circuit_breaker.call
+@timeout_decorator(3)
 def start_game():
     game_data = {
         "status": "in_progress",
@@ -125,6 +125,7 @@ game_rooms = {}
 
 @socketio.on('join_game')
 @circuit_breaker.call
+@timeout_decorator(3)
 def join_game(data):
     game_id = data['game_id']
     user_id = data['user_id']
@@ -166,6 +167,7 @@ def join_game(data):
 
 @app.route('/game/game-status/<game_id>', methods=['GET'])
 @circuit_breaker.call
+@timeout_decorator(3)
 def get_game_status(game_id):
     game = games_collection.find_one({"_id": game_id})
     if not game:
@@ -178,6 +180,7 @@ def get_game_status(game_id):
 
 @socketio.on('post_question')
 @circuit_breaker.call
+@timeout_decorator(3)
 def post_question(data):
     game_id = data['game_id']
     question_data = data['question_data']
@@ -195,6 +198,7 @@ def post_question(data):
 
 @app.route('/game/submit-answer/<game_id>/<user_id>/<question_id>', methods=['POST'])
 @circuit_breaker.call
+@timeout_decorator(3)
 def submit_answer(game_id, user_id, question_id):
     data = request.json
     submitted_answer = data.get('answer')
@@ -224,6 +228,7 @@ def submit_answer(game_id, user_id, question_id):
 
 @app.route('/game/questions', methods=['GET'])
 @circuit_breaker.call
+@timeout_decorator(3)
 def get_all_questions():
     questions = list(questions_collection.find({}))
     for question in questions:
@@ -232,6 +237,7 @@ def get_all_questions():
 
 @app.route('/game/questions/<question_id>', methods=['GET'])
 @circuit_breaker.call
+@timeout_decorator(3)
 def get_question(question_id):
     question = questions_collection.find_one({"_id": question_id})
     if not question:

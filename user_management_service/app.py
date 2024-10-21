@@ -15,9 +15,6 @@ users_collection = db['users']
 class TimeoutException(Exception):
     pass
 
-def timeout_handler(signum, frame):
-    raise TimeoutException("Task timeout exceeded")
-
 def timeout_decorator(timeout):
     def decorator(func):
         @wraps(func)
@@ -103,7 +100,7 @@ def get_user(user_id):
 @circuit_breaker.call
 @timeout_decorator(3)
 def get_all_users():
-    time.sleep(500)
+    # time.sleep(500)
     users = list(users_collection.find())
     return jsonify(users), 200
 
@@ -112,5 +109,4 @@ def health():
     return "OK", 200
 
 if __name__ == '__main__':
-    signal.signal(signal.SIGALRM, timeout_handler)
     app.run(host='0.0.0.0', port=5002)
