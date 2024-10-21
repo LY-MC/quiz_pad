@@ -55,15 +55,11 @@ const shouldCache = (req, res) => {
   );
 };
 
-const circuitBreakerOptions = {
-  timeout: 10000,
-  errorThresholdPercentage: 50,
-  resetTimeout: 60000,
-};
+
 
 const proxyBreaker = new CircuitBreaker(async (req, res, next) => {
   next();
-}, circuitBreakerOptions);
+});
 
 proxyBreaker.fallback((req, res) => {
   res.status(503).json({ error: "Service unavailable" });

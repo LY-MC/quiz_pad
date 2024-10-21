@@ -33,34 +33,43 @@ class CircuitBreaker:
     def __init__(self, failure_threshold, recovery_timeout):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
-        self.failures = deque(maxlen=failure_threshold)
+        self.failure_count = 0
         self.state = 'CLOSED'
         self.last_failure_time = None
 
     def call(self, func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            app.logger.info(f"Current state: {self.state}, failure count: {self.failure_count}")
             if self.state == 'OPEN':
                 if datetime.now() - self.last_failure_time > timedelta(seconds=self.recovery_timeout):
                     self.state = 'HALF_OPEN'
+                    app.logger.info(f"Circuit breaker state changed to HALF_OPEN for {func.__name__}")
                 else:
-                    return jsonify({"error": "Service unavailable"}), 503
-
+                    app.logger.error(f"Circuit breaker OPEN: {func.__name__}")
+                    return jsonify({"error": "Service unavailable", "failure_count": self.failure_count}), 503
             try:
                 response = func(*args, **kwargs)
                 if self.state == 'HALF_OPEN':
                     self.state = 'CLOSED'
-                self.failures.clear()
+                    app.logger.info(f"Circuit breaker state changed to CLOSED for {func.__name__}")
+                self.failure_count = 0 
+                app.logger.info(f"Request succeeded, resetting failure count to {self.failure_count}")
                 return response
             except Exception as e:
-                self.failures.append(datetime.now())
-                if len(self.failures) == self.failure_threshold:
+                self.failure_count += 1
+                app.logger.error(f"Exception in {func.__name__}: {e}")
+                app.logger.info(f"Incremented failure count to {self.failure_count}")
+                if self.failure_count >= self.failure_threshold:
                     self.state = 'OPEN'
                     self.last_failure_time = datetime.now()
-                raise e
+                    app.logger.error(f"Circuit breaker triggered: {func.__name__}")
+                    return jsonify({"error": "Service unavailable", "failure_count": self.failure_count}), 503
+                return jsonify({"error": "Temporary unavailable", "failure_count": self.failure_count}), 503
+
         return wrapper
 
-circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=40)
+circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=10)
 
 @app.route('/users/simulate-failure', methods=['GET'])
 @circuit_breaker.call

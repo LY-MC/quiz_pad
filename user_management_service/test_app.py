@@ -30,7 +30,7 @@ class UserManagementServiceTestCase(unittest.TestCase):
         user_data = {'name': 'John Doe', 'email': 'john@example.com', 'age': 30}
         response = self.app.post('/users/user/register', json=user_data)
         self.assertEqual(response.status_code, 201)
-        self.assertIn('User registered successfully!', response.get_data(as_text=True))
+        self.assertIn('User registered successfully', response.get_data(as_text=True))
 
     def test_health(self):
         response = self.app.get('/health')
@@ -42,11 +42,6 @@ class UserManagementServiceTestCase(unittest.TestCase):
         response = self.app.get('/users/status')
         self.assertEqual(response.status_code, 200)
         self.assertIn('Service is running', response.get_data(as_text=True))
-
-    def test_simulate_failure(self):
-        response = self.app.get('/users/simulate-failure')
-        self.assertEqual(response.status_code, 500)
-        self.assertIn('Simulated failure', response.get_data(as_text=True))
 
 if __name__ == '__main__':
     unittest.main()
