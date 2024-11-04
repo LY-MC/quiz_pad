@@ -1,0 +1,309 @@
+{
+	"info": {
+		"_postman_id": "f34b2430-0476-4afc-aabd-b90e579f415d",
+		"name": "quiz_pad",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "27060539"
+	},
+	"item": [
+		{
+			"name": "http://localhost:5000/game/start-game",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/game/start-game",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"start-game"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/post-question",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"question\": \"Who is the current CEO of Tesla (as of 2023)?\",\r\n    \"options\": [\"Elon Musk\", \"Jeff Bezos\", \"Bill Gates\", \"Tim Cook\"],\r\n    \"correct_answer\": \"Elon Musk\"\r\n}\r\n\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/game/post-question",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"post-question"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/questions",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/game/questions",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"questions"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/game-status/<game_id>",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/game/game-status/<game_id>",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"game-status",
+						"<game_id>"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/simulate-failure",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/game/simulate-failure",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"simulate-failure"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/users/user/register",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "",
+						"value": "",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"name\": \"Anton\",\r\n    \"email\": \"Anton.Full@example.com\",\r\n    \"age\": 25\r\n}\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/users/user/register",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"users",
+						"user",
+						"register"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/users/status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/users/status",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"users",
+						"status"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/users/simulate-failure",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/users/simulate-failure",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"users",
+						"simulate-failure"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/users",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/users/<user_id>",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/users/<user_id>",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"users",
+						"<user_id>"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/game/status",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"status"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/submit-answer/<game_id>/<user_id>/<question_id>",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/game/submit-answer/<game_id>/<user_id>/<question_id>",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"submit-answer",
+						"<game_id>",
+						"<user_id>",
+						"<question_id>"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "http://localhost:5000/game/questions/<question_id>",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/game/questions/<question_id>",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"game",
+						"questions",
+						"<question_id>"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
