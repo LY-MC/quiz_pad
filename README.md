@@ -6,10 +6,17 @@ In the multiplayer quiz game many users can join simultaneously and if we are ta
 2. User Management Service - manages user authentication, profiles and leaderboards
 3. Game Engine Service - handles the quiz game logic, scoring and gameplay sessions
 
-![image](https://github.com/user-attachments/assets/a8eb279b-eff9-4b45-a251-8c4455ea5692)
-
-Load Balancer is used to distribute incoming requests across multiple instances of services for better performance and reliability.
-Service Discovery is used to allow microservices to find and communicate with each other dynamically.
+![image](https://github.com/user-attachments/assets/2c25eb67-b76b-4ecf-acd1-37650fb951b8)
+ 
+User: The user interacts with the system through WebSockets for real-time communication, such as game status updates or gameplay interactions.    
+Gateway: A Node.js-based load balancer is responsible for managing and routing incoming requests from the user to the appropriate microservices. The Gateway handles both REST API requests and WebSocket connections.   
+User Management Service: Manages user data, including authentication, user profile information, and score history. It utilizes MongoDB for data storage and Redis for caching purposes. This service can interact with other components for user-related operations.   
+Game Engine Service: Manages the game logic, including handling gameplay events and retrieving game data. It stores game-related information in a separate MongoDB database.   
+ETL Service: An Extract, Transform, Load (ETL) service collects and processes data from both the User Management Service and the Game Engine Service. It loads the processed data into a Data Warehouse for analytics and reporting.   
+Service Discovery: A mechanism that allows the Gateway and other services to discover and communicate with each other dynamically, ensuring efficient load balancing and fault tolerance.   
+Prometheus: Used for monitoring the system, collecting metrics from the microservices, and tracking performance.    
+Grafana: Provides a dashboard for visualizing the collected metrics from Prometheus, helping to monitor the health and performance of the system.    
+Cache Access: The system uses Redis for caching, which helps improve performance by reducing the need to query MongoDB frequently.     
 
 ## Technology stack
 1. User Management and Game Engine Service:
