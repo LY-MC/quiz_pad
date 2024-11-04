@@ -13,12 +13,12 @@ Service Discovery is used to allow microservices to find and communicate with ea
 
 ## Technology stack
 1. User Management and Game Engine Service:
-Language - Python
-Communication - gRPC, WebSockets
-Database - MongoDB
-2. API Gateway:
-Language - JavaScript
-Framework - Node.js with Express.js
+    Language - Python     
+    Communication - gRPC, WebSockets    
+    Database - MongoDB     
+2. API Gateway:    
+    Language - JavaScript    
+    Framework - Node.js with Express.js    
 
 ### Running the Project
 1. Clone the repository:
@@ -48,7 +48,7 @@ Framework - Node.js with Express.js
 
 ## Data Management
 1. User Management Service:
-* GET /users/status
+* GET /users/status    
 Description: Check the status of the User Management Service.
   * Response
     * 200 OK: Returns service status and version. 
@@ -60,8 +60,8 @@ Description: Check the status of the User Management Service.
      }
      ```
      
-* POST /users/user/register
-Description: Register a new user.
+* POST /users/user/register    
+Description: Register a new user.     
   * Request Body (JSON object containing user information (e.g., name, email, etc.).)
   ```
   {
@@ -83,8 +83,8 @@ Description: Register a new user.
      ```
     * 503 Service Unavailable: When the service is temporarily unavailable.
       
-* GET /users/<user_id>
-Description: Retrieve a specific user's details
+* GET /users/<user_id>    
+Description: Retrieve a specific user's details        
 user_id: The unique identifier of the user.
   * Response
     *  200 OK: Returns the user data.
@@ -98,8 +98,8 @@ user_id: The unique identifier of the user.
      *  404 Not Found: If the user does not exist.
      *  503 Service Unavailable: When the service is temporarily unavailable.
       
-* GET /users
-Description: Retrieve a list of all registered users.
+* GET /users     
+Description: Retrieve a list of all registered users.     
   * Response
     *  200 OK: Returns a list of all users.
      ```
@@ -118,8 +118,8 @@ Description: Retrieve a list of all registered users.
      ```
      *  503 Service Unavailable: When the service is temporarily unavailable.
    
-* GET /users/simulate-failure
-Description: Simulate a service failure to test the Circuit Breaker.
+* GET /users/simulate-failure   
+Description: Simulate a service failure to test the Circuit Breaker.    
   * Response
     *  503 Service Unavailable: Always returns a simulated error message.
      ```
@@ -129,8 +129,8 @@ Description: Simulate a service failure to test the Circuit Breaker.
      ```
      
 2. Game Engine Service:
-* GET /game/status
-Description: Get the status of the Game Engine Service.
+* GET /game/status    
+Description: Get the status of the Game Engine Service.    
   * Response
     * 200 OK: Returns service status and version. 
      ```
@@ -141,7 +141,7 @@ Description: Get the status of the Game Engine Service.
      }
      ```
      
-* POST /game/submit-answer/<game_id>/<user_id>/<question_id>
+* POST /game/submit-answer/<game_id>/<user_id>/<question_id>    
 Description: Submits an answer to a question in the specified game.
   * Request Body
   ```
@@ -166,8 +166,8 @@ Description: Submits an answer to a question in the specified game.
     * 404 Not Found: If game or question not found.
     * 503 Service Unavailable: When the service is temporarily unavailable.
       
-* GET /game/game-status/<game_id>
-Description: Retrieves the status of a specific game.
+* GET /game/game-status/<game_id>    
+Description: Retrieves the status of a specific game.    
 game_id: The unique identifier of the game.
   * Response
     *  200 OK: Returns the game data.
@@ -181,7 +181,7 @@ game_id: The unique identifier of the game.
      *  404 Not Found: If the game does not exist.
      *  503 Service Unavailable: When the service is temporarily unavailable.
       
-* GET /game/game-status/<game_id>
+* GET /game/game-status/<game_id>    
 Description: Retrieves the status of a specific game.
   * Response
     *  200 OK: Returns a list of all users.
@@ -195,21 +195,21 @@ Description: Retrieves the status of a specific game.
     *  404 Not Found: If the game does not exist.
     *  503 Service Unavailable: When the service is temporarily unavailable.
 
-* GET /game/questions
+* GET /game/questions    
 Description: Simulates a failure to demonstrate the Circuit Breaker functionality.
   * Response
     *  200 OK: Returns a list of all questions.
     *  404 Not Found: If the game does not exist.
     *  503 Service Unavailable: When the service is temporarily unavailable.
    
-* GET /game/questions/<question_id>
+* GET /game/questions/<question_id>    
 Description: Retrieves a specific question by its ID.
   * Response
     *  200 OK: Returns a list of all questions.
     *  404 Not Found: If the game does not exist.
     *  503 Service Unavailable: When the service is temporarily unavailable.
    
-* GET /game/simulate-failure
+* GET /game/simulate-failure    
 Description: Simulates a failure to demonstrate the Circuit Breaker functionality.
   * Response
     *  503 Service Unavailable: Always returns a simulated error message.
@@ -220,19 +220,19 @@ Description: Simulates a failure to demonstrate the Circuit Breaker functionalit
      ```
      
 * WebSocket Events
-  * Connect
-    Event: connect
-    Description: Triggered when a client connects to the WebSocket server.
-    Response: Confirmation message.
+  * Connect    
+    Event: connect    
+    Description: Triggered when a client connects to the WebSocket server.    
+    Response: Confirmation message.    
     
-  * Disconnect
-    Event: disconnect
-    Description: Triggered when a client disconnects from the WebSocket server.
+  * Disconnect    
+    Event: disconnect    
+    Description: Triggered when a client disconnects from the WebSocket server.    
     
-  * Join Game
-    Event: join_game
-    Description: Allows a user to join a game. Adds the user to the game and sends a confirmation message.
-    Request Data:
+  * Join Game    
+    Event: join_game     
+    Description: Allows a user to join a game. Adds the user to the game and sends a confirmation message.     
+    Request Data:   
     ```
     {
       "game_id": "game-id",
@@ -241,10 +241,11 @@ Description: Simulates a failure to demonstrate the Circuit Breaker functionalit
     ```
     
     Response: Confirmation or error message.
-  * Leave Game
-    Event: leave_game
-    Description: Allows a user to leave a game and sends a notification to the room.
-    Request Data:
+    
+  * Leave Game    
+    Event: leave_game    
+    Description: Allows a user to leave a game and sends a notification to the room.    
+    Request Data:   
     ```
     {
       "game_id": "game-id",
@@ -252,10 +253,10 @@ Description: Simulates a failure to demonstrate the Circuit Breaker functionalit
     }
     ```
     
-  * Post Question
-    Event: post_question
-    Description: Posts a new question to a specific game.
-    Request Data:
+  * Post Question    
+    Event: post_question    
+    Description: Posts a new question to a specific game.     
+    Request Data:    
     ```
     {
       "game_id": "game-id",
@@ -266,7 +267,7 @@ Description: Simulates a failure to demonstrate the Circuit Breaker functionalit
       }
     }
     ```
-    Response: Success or error message.
+    Response: Success or error message.    
     
 
 ## Deployment and Scaling
