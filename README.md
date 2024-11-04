@@ -136,6 +136,23 @@ Description: Simulate a service failure to test the Circuit Breaker.
      ```
      
 2. Game Engine Service:
+   
+* POST /game/start-game   
+Description: Starting the game
+  * Response
+    * 200 OK: Game started:
+     ```
+    {
+        "game": {
+            "_id": "1d10337d-5776-4f0c-83aa-2a8b87b176ac",
+            "players_scores": {},
+            "status": "in_progress"
+        },
+        "message": "Game started!"
+    }
+     ```
+    * 503 Service Unavailable: When the service is temporarily unavailable.
+      
 * GET /game/status    
 Description: Get the status of the Game Engine Service.    
   * Response
@@ -275,7 +292,11 @@ Description: Simulates a failure to demonstrate the Circuit Breaker functionalit
     }
     ```
     Response: Success or error message.    
-    
+
+## Steps to fully test the app
+1. POST /users/user/register in order to use the app there should be at least one user
+2. POST /game/start-game to start the game
+3. Anything can be done next
 
 ## Deployment and Scaling
 1. **Docker Compose**: Use [docker-compose.yml](https://github.com/LY-MC/quiz_pad/blob/main/docker-compose.yml) to run multi-container applications.
