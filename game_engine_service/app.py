@@ -10,24 +10,36 @@ import uuid
 from functools import wraps
 from collections import deque
 from datetime import datetime, timedelta
-from flask_socketio import SocketIO, send, join_room
+from flask_socketio import SocketIO, send, emit, join_room, leave_room
 import signal
+import redis
+import threading
 
 USER_SERVICE_URL = "http://user_management_service:5002"
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
 client = MongoClient('mongodb://gamesdb:27017')
 db = client['quiz_game_db']
 games_collection = db['games']
 questions_collection = db['questions']
+redis_client = redis.StrictRedis(host='redis', port=6379, db=0)
+pubsub = redis_client.pubsub()
 
 executor = ThreadPoolExecutor(max_workers=2)
 
 class TimeoutException(Exception):
     pass
 
+
+def broadcast_messages():
+    """Function to publish messages to all WebSocket clients every 5 seconds."""
+    while True:
+        socketio.emit('broadcast_message', {"message": "This is a broadcast message to all clients"})
+        socketio.sleep(5)  # Sleep for 5 seconds before sending the next message
+        
 def timeout_decorator(timeout):
     def decorator(func):
         @wraps(func)
@@ -99,7 +111,6 @@ def health():
 @circuit_breaker.call
 @timeout_decorator(3)
 def status():
-    # time.sleep(200)
     return jsonify({
         "status": "Service is running",
         "service": "Game Engine Service",
@@ -133,8 +144,14 @@ def start_game():
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Global dictionary to manage game rooms
-game_rooms = {}
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+    send('Connected to WebSocket server')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
 
 @socketio.on('join_game')
 @circuit_breaker.call
@@ -143,8 +160,9 @@ def join_game(data):
     game_id = data['game_id']
     user_id = data['user_id']
     sid = request.sid
+
     game = games_collection.find_one({"_id": game_id})
-    logging.debug(f"Initial game rooms state: {game_rooms}")
+    logging.debug(f"Joining game: {game_id} by user: {user_id}")
 
     if not game:
         send({"error": "Game not found"}, room=sid)
@@ -162,21 +180,30 @@ def join_game(data):
 
     updated_game = games_collection.find_one({"_id": game_id})
 
-    # Ensure game_rooms has an entry for the game_id
-    game_rooms.setdefault(game_id, []).append(sid)
-        
-    # Log the current state of game rooms
-    logging.debug(f"Current game rooms: {game_rooms}")
-
-    # Send a message to the new user
+    # Send a message to the user who just joined
     send({"message": "You joined the game!", "game": updated_game}, room=sid)
 
-    # Notify all connected users in the room that a new player has joined
-    message = f"User {user_id} joined the game!"
-    for user_sid in game_rooms[game_id]:
-        if user_sid != sid:  # Avoid sending the message back to the new user
-            send({"message": message, "game": updated_game}, room=user_sid)
 
+
+    # Join the user to the game room
+    join_room(game_id)
+    logging.debug(f"User {user_id} joined room: {game_id}")
+
+    # Debug: Check existing rooms
+    logging.debug(f"Current rooms: {socketio.server.manager.rooms}")
+        # Notify only users in the same game room
+    socketio.emit('user_joined', {
+        "message": f"User {user_id} has joined the game!",
+        "game_id": game_id
+    }, room=game_id)  # Specify the room as the game_id
+    logging.debug(f"Emitted 'user_joined' to room: {game_id}")
+
+@socketio.on('leave_game')
+def on_leave(data):
+    game_id = data['game_id']
+    user_id = data['user_id']
+    leave_room(game_id)
+    send(user_id + ' has left the room.', to=game_id)
 
 @app.route('/game/game-status/<game_id>', methods=['GET'])
 @circuit_breaker.call
@@ -208,6 +235,14 @@ def post_question(data):
     questions_collection.insert_one(question_data)
 
     send({"message": "Question posted successfully!", "question": question_data}, room=game_id)
+
+@socketio.on_error()        # Handles the default namespace
+def error_handler(e):
+    print(f"An error has occurred: {e}")
+
+@socketio.on_error_default  # handles all namespaces without an explicit error handler
+def default_error_handler(e):
+    print(f"An error has occurred: {e}")
 
 @app.route('/game/submit-answer/<game_id>/<user_id>/<question_id>', methods=['POST'])
 @circuit_breaker.call
@@ -257,5 +292,20 @@ def get_question(question_id):
         return jsonify({"error": "Question not found"}), 404
     return jsonify(question), 200
 
+def redis_listener():
+    pubsub.subscribe([game_id for game_id in game_rooms.keys()])
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            game_id = message['channel'].decode('utf-8')
+            data = message['data'].decode('utf-8')
+            socketio.emit('user_joined', {"message": data}, room=game_id)
+
+# Start the broadcast message thread
+broadcast_thread = threading.Thread(target=broadcast_messages)
+broadcast_thread.daemon = True  # This ensures the thread will close when the main program exits
+broadcast_thread.start()
+
 if __name__ == '__main__':
+    listener_thread = threading.Thread(target=redis_listener)
+    listener_thread.start()
     socketio.run(app, host='0.0.0.0', port=5003)

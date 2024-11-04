@@ -4,7 +4,7 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const CircuitBreaker = require("opossum");
 const axios = require("axios");
 const rateLimit = require("express-rate-limit");
-const loadBalancerUrl = 'http://nginx_load_balancer'; 
+let serviceIndexes = {};
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -16,6 +16,20 @@ const redisClient = redis.createClient({
 redisClient.connect().catch((err) => {
   console.error("Redis connection error:", err);
 });
+
+const getNextServiceInstance = (serviceName, instances) => {
+  if (!serviceIndexes[serviceName]) {
+    serviceIndexes[serviceName] = 0;
+  }
+
+  const instanceIndex = serviceIndexes[serviceName];
+  const serviceInstance = instances[instanceIndex];
+
+  // Update index for next round-robin
+  serviceIndexes[serviceName] = (instanceIndex + 1) % instances.length;
+
+  return serviceInstance;
+};
 
 const cacheMiddleware = async (req, res, next) => {
   if (req.method !== "GET") {
@@ -56,7 +70,6 @@ const shouldCache = (req, res) => {
 };
 
 
-
 const proxyBreaker = new CircuitBreaker(async (req, res, next) => {
   next();
 });
@@ -73,9 +86,17 @@ const getService = async (serviceName) => {
   try {
     const response = await axios.get("http://service_discovery:3000/services");
     const services = response.data;
-    const service = services.find((s) => s.name === serviceName);
-    console.log(`Retrieved service info for ${serviceName}:`, service);
-    return service;
+    const serviceInstances = services.filter((s) => s.name === serviceName);
+
+    if (serviceInstances.length === 0) {
+      console.log(`No instances found for service: ${serviceName}`);
+      return null;
+    }
+
+    // Get the next instance in round-robin
+    const nextServiceInstance = getNextServiceInstance(serviceName, serviceInstances);
+    console.log(`Selected instance for ${serviceName}:`, nextServiceInstance);
+    return nextServiceInstance;
   } catch (err) {
     console.error("Failed to get service:", err);
     return null;
@@ -88,8 +109,8 @@ const createProxy = async (serviceName) => {
     throw new Error(`${serviceName} service unavailable`);
   }
   const targetUrl = `http://${service.ip}:${service.port}`;
-  console.log(`Proxying requests to: ${targetUrl}`);
-  return createProxyMiddleware({
+  console.log(`Proxying request to: http://${service.ip}:${service.port}`);
+  return createProxyMiddleware({ 
     target: targetUrl,
     changeOrigin: true,
     onProxyRes: async (proxyRes, req, res) => {

@@ -47,7 +47,7 @@ class CircuitBreaker:
                     app.logger.info(f"Circuit breaker state changed to HALF_OPEN for {func.__name__}")
                 else:
                     app.logger.error(f"Circuit breaker OPEN: {func.__name__}")
-                    return jsonify({"error": "Service unavailable", "failure_count": self.failure_count}), 503
+                    return jsonify({"error": "Service unavailable"}), 503
             try:
                 response = func(*args, **kwargs)
                 if self.state == 'HALF_OPEN':
@@ -64,22 +64,22 @@ class CircuitBreaker:
                     self.state = 'OPEN'
                     self.last_failure_time = datetime.now()
                     app.logger.error(f"Circuit breaker triggered: {func.__name__}")
-                    return jsonify({"error": "Service unavailable", "failure_count": self.failure_count}), 503
-                return jsonify({"error": "Temporary unavailable", "failure_count": self.failure_count}), 503
+                    return jsonify({"error": "Service unavailable"}), 503
+                return jsonify({"error": "Temporary unavailable"}), 503
 
         return wrapper
 
-circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=10)
+circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=500)
 
 @app.route('/users/simulate-failure', methods=['GET'])
 @circuit_breaker.call
-@timeout_decorator(3)
+# @timeout_decorator(3)
 def simulate_failure():
     raise Exception("Simulated failure")
 
 @app.route('/users/status', methods=['GET'])
 @circuit_breaker.call
-@timeout_decorator(3)
+# @timeout_decorator(3)
 def status():
     return jsonify({
         "status": "Service is running",
@@ -89,7 +89,7 @@ def status():
 
 @app.route('/users/user/register', methods=['POST'])
 @circuit_breaker.call
-@timeout_decorator(3)
+# @timeout_decorator(3)
 def register_user():
     user_data = request.json
     user_data['_id'] = str(uuid.uuid4())
@@ -98,7 +98,7 @@ def register_user():
 
 @app.route('/users/<user_id>', methods=['GET'])
 @circuit_breaker.call
-@timeout_decorator(3)
+# @timeout_decorator(3)
 def get_user(user_id):
     user = users_collection.find_one({"_id": user_id})
     if not user:
@@ -107,7 +107,7 @@ def get_user(user_id):
 
 @app.route('/users', methods=['GET'])
 @circuit_breaker.call
-@timeout_decorator(3)
+# @timeout_decorator(3)
 def get_all_users():
     # time.sleep(500)
     users = list(users_collection.find())
