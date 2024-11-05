@@ -6,7 +6,7 @@ In the multiplayer quiz game many users can join simultaneously and if we are ta
 2. User Management Service - manages user authentication, profiles and leaderboards
 3. Game Engine Service - handles the quiz game logic, scoring and gameplay sessions
 
-![image](https://github.com/user-attachments/assets/ba6d1481-bd2d-452e-a193-1c34c5a457e1)
+![image](https://github.com/user-attachments/assets/1bdf990c-a25d-402c-8348-e187dd9839b4)
  
 User: The user interacts with the system through WebSockets for real-time communication, such as game status updates or gameplay interactions.    
 Gateway: A Node.js-based load balancer is responsible for managing and routing incoming requests from the user to the appropriate microservices. The Gateway handles both REST API requests and WebSocket connections.   
