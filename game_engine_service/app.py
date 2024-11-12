@@ -54,50 +54,7 @@ def timeout_decorator(timeout):
         return wrapper
     return decorator
 
-class CircuitBreaker:
-    def __init__(self, failure_threshold, recovery_timeout):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.failure_count = 0
-        self.state = 'CLOSED'
-        self.last_failure_time = None
-
-    def call(self, func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            app.logger.info(f"Current state: {self.state}, failure count: {self.failure_count}")
-            if self.state == 'OPEN':
-                if datetime.now() - self.last_failure_time > timedelta(seconds=self.recovery_timeout):
-                    self.state = 'HALF_OPEN'
-                    app.logger.info(f"Circuit breaker state changed to HALF_OPEN for {func.__name__}")
-                else:
-                    app.logger.error(f"Circuit breaker OPEN: {func.__name__}")
-                    return jsonify({"error": "Service unavailable", "failure_count": self.failure_count}), 503
-            try:
-                response = func(*args, **kwargs)
-                if self.state == 'HALF_OPEN':
-                    self.state = 'CLOSED'
-                    app.logger.info(f"Circuit breaker state changed to CLOSED for {func.__name__}")
-                self.failure_count = 0 
-                app.logger.info(f"Request succeeded, resetting failure count to {self.failure_count}")
-                return response
-            except Exception as e:
-                self.failure_count += 1
-                app.logger.error(f"Exception in {func.__name__}: {e}")
-                app.logger.info(f"Incremented failure count to {self.failure_count}")
-                if self.failure_count >= self.failure_threshold:
-                    self.state = 'OPEN'
-                    self.last_failure_time = datetime.now()
-                    app.logger.error(f"Circuit breaker triggered: {func.__name__}")
-                    return jsonify({"error": "Service unavailable", "failure_count": self.failure_count}), 503
-                return jsonify({"error": "Temporary unavailable", "failure_count": self.failure_count}), 503
-
-        return wrapper
-
-circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=10)
-
 @app.route('/game/simulate-failure', methods=['GET'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def simulate_failure():
     raise Exception("Simulated failure")
@@ -108,7 +65,6 @@ def health():
     return 'OK', 200
 
 @app.route('/game/status', methods=['GET'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def status():
     return jsonify({
@@ -118,7 +74,6 @@ def status():
     }), 200
 
 @app.route('/game/start-game', methods=['POST'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def start_game():
     game_data = {
@@ -154,7 +109,6 @@ def handle_disconnect():
     print('Client disconnected')
 
 @socketio.on('join_game')
-@circuit_breaker.call
 @timeout_decorator(3)
 def join_game(data):
     game_id = data['game_id']
@@ -206,7 +160,6 @@ def on_leave(data):
     send(user_id + ' has left the room.', to=game_id)
 
 @app.route('/game/game-status/<game_id>', methods=['GET'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def get_game_status(game_id):
     game = games_collection.find_one({"_id": game_id})
@@ -219,7 +172,6 @@ def get_game_status(game_id):
     }), 200
 
 @socketio.on('post_question')
-@circuit_breaker.call
 @timeout_decorator(3)
 def post_question(data):
     game_id = data['game_id']
@@ -245,7 +197,6 @@ def default_error_handler(e):
     print(f"An error has occurred: {e}")
 
 @app.route('/game/submit-answer/<game_id>/<user_id>/<question_id>', methods=['POST'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def submit_answer(game_id, user_id, question_id):
     data = request.json
@@ -275,7 +226,6 @@ def submit_answer(game_id, user_id, question_id):
         return jsonify({"message": "Incorrect answer."}), 200
 
 @app.route('/game/questions', methods=['GET'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def get_all_questions():
     questions = list(questions_collection.find({}))
@@ -284,7 +234,6 @@ def get_all_questions():
     return jsonify(questions), 200
 
 @app.route('/game/questions/<question_id>', methods=['GET'])
-@circuit_breaker.call
 @timeout_decorator(3)
 def get_question(question_id):
     question = questions_collection.find_one({"_id": question_id})

@@ -24,7 +24,7 @@ services:
     ports:
       - "27019:27017"
     volumes:
-      - ./data/mongo:/data/db
+      - mongo_data:/data/db
 
   gamesdb:
     image: mongo:latest
@@ -32,12 +32,10 @@ services:
     ports:
       - "27018:27017"
     volumes:
-      - ./data/gamesdb:/data/db
+      - gamesdb_data:/data/db
 
   user_management_service:
     build: ./user_management_service
-    ports:
-      - "5002" 
     expose:
       - "5002"
     depends_on:
@@ -49,8 +47,6 @@ services:
 
   game_engine_service:
     build: ./game_engine_service
-    ports:
-      - "5003:5003"
     expose:
       - "5003"
     depends_on:
