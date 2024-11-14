@@ -14,6 +14,7 @@ from flask_socketio import SocketIO, send, emit, join_room, leave_room
 import signal
 import redis
 import threading
+import os
 
 USER_SERVICE_URL = "http://user_management_service:5002"
 
@@ -70,7 +71,8 @@ def status():
     return jsonify({
         "status": "Service is running",
         "service": "Game Engine Service",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "port": os.getenv('PORT')
     }), 200
 
 @app.route('/game/start-game', methods=['POST'])
@@ -137,8 +139,6 @@ def join_game(data):
     # Send a message to the user who just joined
     send({"message": "You joined the game!", "game": updated_game}, room=sid)
 
-
-
     # Join the user to the game room
     join_room(game_id)
     logging.debug(f"User {user_id} joined room: {game_id}")
@@ -171,22 +171,16 @@ def get_game_status(game_id):
         "players_scores": game['players_scores']
     }), 200
 
-@socketio.on('post_question')
+@app.route('/game/post-question', methods=['POST'])
 @timeout_decorator(3)
-def post_question(data):
-    game_id = data['game_id']
-    question_data = data['question_data']
-
-    required_fields = ['question', 'options', 'correct_answer']
-    for field in required_fields:
-        if field not in question_data:
-            send({"error": f"{field} is required."}, room=request.sid)
-            return
-
-    question_data['_id'] = str(uuid.uuid4())
-    questions_collection.insert_one(question_data)
-
-    send({"message": "Question posted successfully!", "question": question_data}, room=game_id)
+def post_question():
+    try:
+        question_data = request.json
+        question_data['_id'] = str(uuid.uuid4())
+        questions_collection.insert_one(question_data)
+        return jsonify({"message": "Question posted successfully", "question": question_data}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @socketio.on_error()        # Handles the default namespace
 def error_handler(e):

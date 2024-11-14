@@ -92,5 +92,4 @@ app.get('/status', (req, res) => {
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Service Discovery running on port ${PORT}`);
-  // Optionally, you can call a function here to notify another service on start
 });

@@ -139,7 +139,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"name\": \"Anton\",\r\n    \"email\": \"Anton.Full@example.com\",\r\n    \"age\": 25\r\n}\r\n",
+					"raw": "{\r\n    \"name\": \"Nico\",\r\n    \"email\": \"Nico.Analist@example.com\",\r\n    \"age\": 28\r\n}\r\n",
 					"options": {
 						"raw": {
 							"language": "json"

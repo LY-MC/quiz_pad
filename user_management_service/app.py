@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import uuid
 import time
 import signal
+import os
 
 app = Flask(__name__)
 client = MongoClient('mongodb://mongodb:27017/')
@@ -33,21 +34,26 @@ def timeout_decorator(timeout):
 @app.route('/users/simulate-failure', methods=['GET'])
 def simulate_failure():
     try:
-        raise Exception("Simulated failure")
+        time.sleep(1)
+        if int(os.getenv('FAIL')):
+            raise Exception(f"{os.getenv('SERVICE_ADDRESS')} simulated failure")
+        else:
+            return jsonify({"message": f"{os.getenv('SERVICE_ADDRESS')} managed not to fail"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users/status', methods=['GET'])
-# @timeout_decorator(3)
+@timeout_decorator(3)
 def status():
     return jsonify({
         "status": "Service is running",
         "service": "User Management Service",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "port": os.getenv('PORT')
     }), 200
 
 @app.route('/users/user/register', methods=['POST'])
-# @timeout_decorator(3)
+@timeout_decorator(3)
 def register_user():
     user_data = request.json
     user_data['_id'] = str(uuid.uuid4())
@@ -55,7 +61,7 @@ def register_user():
     return jsonify({"message": "User registered successfully", "user": user_data}), 201
 
 @app.route('/users/<user_id>', methods=['GET'])
-# @timeout_decorator(3)
+@timeout_decorator(3)
 def get_user(user_id):
     user = users_collection.find_one({"_id": user_id})
     if not user:
@@ -63,7 +69,7 @@ def get_user(user_id):
     return jsonify(user), 200
 
 @app.route('/users', methods=['GET'])
-# @timeout_decorator(3)
+@timeout_decorator(3)
 def get_all_users():
     # time.sleep(500)
     users = list(users_collection.find())

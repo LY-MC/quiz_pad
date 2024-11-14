@@ -1,34 +1,59 @@
 const redis = require("redis");
 const express = require("express");
-const { createProxyMiddleware } = require("http-proxy-middleware");
-const CircuitBreaker = require("opossum");
 const axios = require("axios");
 const rateLimit = require("express-rate-limit");
 let serviceIndexes = {};
 
 const app = express();
+
 const PORT = process.env.PORT || 5000;
 
+const MAX_RETRIES = process.env.MAX_RETRIES || 3;
+const MAX_REDIRECTS = process.env.MAX_REDIRECTS || 1;
+
+const logWithFixedLabelWidth = (label, message, width = 25) => {
+  const paddedLabel = label.padEnd(width, ' ');
+  console.log(`${paddedLabel}| ${message}`);
+};
+
+const errorWithFixedLabelWidth = (label, error1, error2, width = 25) => {
+  const paddedLabel = label.padEnd(width, ' ');
+  console.error(`${paddedLabel}|`, error1, error2);
+};
+
 const redisClient = redis.createClient({
-  url: "redis://redis:6379",
+  url: "redis://gateway_cache:6379",
 });
 
 redisClient.connect().catch((err) => {
   console.error("Redis connection error:", err);
 });
 
-const getNextServiceInstance = (serviceName, instances) => {
-  if (!serviceIndexes[serviceName]) {
-    serviceIndexes[serviceName] = 0;
+const cacheSetValue = async (key, value, timeout = null) => {
+  try {
+    await redisClient.set(key, value, {
+      EX: timeout
+    });
+    logWithFixedLabelWidth("cacheSetValue", `Successfully set ${key} to ${value}`);
+  } catch (err) {
+    errorWithFixedLabelWidth("cacheSetValue", 'Error setting value:', err);
   }
+};
 
-  const instanceIndex = serviceIndexes[serviceName];
-  const serviceInstance = instances[instanceIndex];
-
-  // Update index for next round-robin
-  serviceIndexes[serviceName] = (instanceIndex + 1) % instances.length;
-
-  return serviceInstance;
+const cacheGetValue = async (key) => {
+  try {
+    const value = await redisClient.get(key);
+    if (value) {
+      logWithFixedLabelWidth("cacheGetValue", `Value for ${key}: ${value}`);
+      return value;
+    } else {
+      logWithFixedLabelWidth("cacheGetValue", `No value found for ${key}`);
+      return null;
+    }
+  } catch (err) {
+    errorWithFixedLabelWidth("cacheGetValue", 'Error setting value:', err.message);
+    return null;
+  }
 };
 
 const cacheMiddleware = async (req, res, next) => {
@@ -37,20 +62,27 @@ const cacheMiddleware = async (req, res, next) => {
   }
 
   const cacheKey = req.originalUrl;
-  console.log(`Checking cache for: ${cacheKey}`);
+  logWithFixedLabelWidth("cacheMiddleware", `Checking cache for: ${cacheKey}`);
   try {
-    const cachedData = await redisClient.get(cacheKey);
+    const cachedData = await cacheGetValue(cacheKey);
 
     if (cachedData) {
-      console.log("Serving from cache for:", cacheKey);
+      logWithFixedLabelWidth("cacheMiddleware", `Serving from cache for: ${cacheKey}`);
       return res.status(200).json(JSON.parse(cachedData));
     } else {
-      console.log("Cache miss for:", cacheKey);
+      logWithFixedLabelWidth("cacheMiddleware", `Cache miss for: ${cacheKey}`);
     }
   } catch (err) {
-    console.error("Cache error:", err);
+    errorWithFixedLabelWidth("cacheMiddleware", "Cache error:", err.message);
   }
   next();
+};
+
+const shouldCache = (endpoint, responseCode) => {
+  return (
+    (endpoint === '/users/status' || endpoint === "/game/questions") &&
+    responseCode === 200
+  );
 };
 
 const limiter = rateLimit({
@@ -61,116 +93,151 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-const shouldCache = (req, res) => {
-  // Cache only /users and /game/questions endpoints
-  return (
-    (req.originalUrl === "/users" || req.originalUrl === "/game/questions") &&
-    res.statusCode === 200
-  );
+const getNextServiceInstance = async (serviceName, instances) => {
+  if (!serviceIndexes[serviceName]) {
+    serviceIndexes[serviceName] = 0;
+  }
+
+  let serviceInstance = null;
+  let instanceIndex = serviceIndexes[serviceName];
+  let checkedInstances = new Set();
+
+  while (serviceInstance === null && checkedInstances.size < instances.length) {
+    const currentInstance = instances[instanceIndex];
+
+    checkedInstances.add(currentInstance.ip);
+    
+    const circuitStatus = await cacheGetValue(`circuit:${currentInstance.ip}`);
+      
+    if (circuitStatus !== '0') {
+      serviceInstance = currentInstance;
+    } else {
+      logWithFixedLabelWidth("getNextServiceInstance", `Circuit for ${currentInstance.ip} is open. Skipping`);
+    }
+    
+    instanceIndex = (instanceIndex + 1) % instances.length;
+  }
+
+  serviceIndexes[serviceName] = instanceIndex;
+
+  if (serviceInstance === null) {
+    logWithFixedLabelWidth("getNextServiceInstance", `No available instances for ${serviceName} (all circuits are open)`);
+    return null;
+  }
+
+  return serviceInstance;
 };
-
-
-const proxyBreaker = new CircuitBreaker(async (req, res, next) => {
-  next();
-});
-
-proxyBreaker.fallback((req, res) => {
-  res.status(503).json({ error: "Service unavailable" });
-});
-
-proxyBreaker.on("open", () => console.log("Circuit breaker opened"));
-proxyBreaker.on("halfOpen", () => console.log("Circuit breaker half-open"));
-proxyBreaker.on("close", () => console.log("Circuit breaker closed"));
 
 const getService = async (serviceName) => {
   try {
     const response = await axios.get("http://service_discovery:3000/services");
     const services = response.data;
-    const serviceInstances = services.filter((s) => s.name === serviceName);
+    const serviceInstances = services.filter((service) => service.name === serviceName);
 
     if (serviceInstances.length === 0) {
-      console.log(`No instances found for service: ${serviceName}`);
+      logWithFixedLabelWidth("getService", `No instances found for service: ${serviceName}`);
       return null;
     }
 
-    // Get the next instance in round-robin
-    const nextServiceInstance = getNextServiceInstance(serviceName, serviceInstances);
-    console.log(`Selected instance for ${serviceName}:`, nextServiceInstance);
+    const nextServiceInstance = await getNextServiceInstance(serviceName, serviceInstances);
+    logWithFixedLabelWidth("getService", `Selected instance for ${serviceName} - ${nextServiceInstance.ip}`);
+    
     return nextServiceInstance;
   } catch (err) {
-    console.error("Failed to get service:", err);
+    errorWithFixedLabelWidth("getService", "Failed to get service:", err.message);
     return null;
   }
 };
 
-const createProxy = async (serviceName) => {
-  const service = await getService(serviceName);
-  if (!service) {
-    throw new Error(`${serviceName} service unavailable`);
-  }
-  const targetUrl = `http://${service.ip}:${service.port}`;
-  console.log(`Proxying request to: http://${service.ip}:${service.port}`);
-  return createProxyMiddleware({ 
-    target: targetUrl,
-    changeOrigin: true,
-    onProxyRes: async (proxyRes, req, res) => {
-      const body = await streamToString(proxyRes);
-      const cacheKey = req.originalUrl;
-      if (shouldCache(req, res)) {
-        await redisClient.setEx(cacheKey, 360, body);
+const requestWithRetries = async (url, method, data, headers, retries = MAX_RETRIES) => {
+  try {
+    const response = await axios({
+      method: method,
+      url: url,
+      data: data,
+      headers: headers
+    });
+    return response;
+  } catch (error) {
+    lastError = error;
+
+    if (error.response?.status >= 400 && error.response?.status < 500)
+    {
+      return error.response;
+    } 
+    
+    if (retries > 0 && error.response?.status >= 500) {
+      logWithFixedLabelWidth("requestWithRetries", `Retrying request to ${url}. Attempts left: ${retries}`)
+      return await requestWithRetries(url, method, data, headers, retries - 1);
+    } else {
+      // Break the circuit for the failed service instance after maximum retries
+      if (lastError) {
+        const failedIp = new URL(url).hostname;
+        await cacheSetValue(`circuit:${failedIp}`, '0');
+        errorWithFixedLabelWidth("requestWithRetries", `Max retries reached, service at ${failedIp} is unavailable`, '');
       }
-    },
-  });
+
+      throw lastError;
+    }
+  }
 };
 
-app.use(
-  "/users",
-  cacheMiddleware,
-  async (req, res, next) => {
-    const userService = await getService("user_management_service");
-    if (!userService) {
-      return res.status(503).json({ error: "User service unavailable" });
-    }
-    await proxyBreaker.fire(req, res, next);
-  },
-  async (req, res, next) => {
-    const proxy = await createProxy("user_management_service");
-    proxy(req, res, next);
-  }
-);
+const redirectRequest = async (serviceName, method, endpoint, data, headers, maxRedirects = MAX_REDIRECTS) => {
+  let currentRedirects = 0;
+  let lastError = null;
+  
+  while (currentRedirects < maxRedirects) {
+    // Get the next available service instance using getService
+    const service = await getService(serviceName);
 
-app.use(
-  "/game",
-  cacheMiddleware,
-  async (req, res, next) => {
-    const gameService = await getService("game_engine_service");
-    if (!gameService) {
-      return res.status(503).json({ error: "Game service unavailable" });
+    if (!service) {
+      errorWithFixedLabelWidth("redirectRequest", `No available ${serviceName} instances`, '');
+      throw new Error(`No available ${serviceName} instances`);
     }
-    await proxyBreaker.fire(req, res, next);
-  },
-  async (req, res, next) => {
-    const proxy = await createProxy("game_engine_service");
-    proxy(req, res, next);
+
+    const url = `http://${service.ip}:${service.port}${endpoint}`;
+    try {
+      const response = await requestWithRetries(url, method, data, headers);
+
+      if (shouldCache(endpoint, response.status)) {
+        cacheSetValue(endpoint, JSON.stringify(response.data), 60);
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+      errorWithFixedLabelWidth("redirectRequest", `Request to ${service.ip}:${service.port} failed, redirecting. Redirects left: ${maxRedirects - currentRedirects - 1}`, '');
+      currentRedirects++;
+    }
   }
-);
+
+  throw new Error(`${currentRedirects} instances of ${serviceName} failed to procees the request`)
+};
+
+app.use("/users", cacheMiddleware, async (req, res, next) => {
+  let response;
+  try {
+    response = await redirectRequest('user_management_service', req.method, req.originalUrl, req.body, req.headers);
+    res.json(response.data);
+  } catch (err) {
+    errorWithFixedLabelWidth("usersRoute", "Request failed:", err.message);
+    res.status(503).json({ message: `Unable to process the request`, last_error: err.message });
+  }
+});
+
+app.use("/game", cacheMiddleware, async (req, res, next) => {
+  try {
+    const response = await redirectRequest('game_engine_service', req.method, req.originalUrl, req.body, req.headers);
+    res.json(response.data);
+  } catch (err) {
+    errorWithFixedLabelWidth("gameRoute", "Request failed:", err.message);
+    res.status(503).json({ message: `Unable to process the request`, last_error: err.message });
+  }
+});
 
 app.get("/status", (req, res) => {
   res.json({ status: "Gateway is up and running!" });
 });
-
-const streamToString = (stream) => {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    stream.on("data", (chunk) => {
-      chunks.push(Buffer.from(chunk));
-    });
-    stream.on("error", reject);
-    stream.on("end", () => {
-      resolve(Buffer.concat(chunks).toString("utf8"));
-    });
-  });
-};
 
 const registerService = async () => {
   try {
@@ -178,7 +245,7 @@ const registerService = async () => {
       "http://service_discovery:3000/register",
       {
         name: "gateway",
-        ip: "gateway", // Use the service name as the IP address
+        ip: "gateway",
         port: PORT,
       }
     );
