@@ -198,6 +198,16 @@ def get_game_status(game_id):
         "players_scores": game['players_scores']
     }), 200
 
+@app.route('/game/<game_id>', methods=['DELETE'])
+@timeout_decorator(3)
+def delete_game_session(game_id):
+    result = games_collection.delete_one({"_id": game_id})
+    if result.deleted_count == 0:
+        logMsg(f"Game session not found for deletion: {game_id}")
+        return jsonify({"error": "Game session not found"}), 404
+    logMsg(f"Game session deleted: {game_id}")
+    return jsonify({"message": "Game session deleted successfully"}), 200
+
 @app.route('/game/post-question', methods=['POST'])
 @timeout_decorator(3)
 def post_question():

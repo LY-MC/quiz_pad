@@ -7,6 +7,7 @@ import signal
 import os
 import logging
 import requests
+from saga_coordinator import SagaCoordinator, create_user_step, create_game_session_step, delete_user_step, delete_game_session_step
 
 app = Flask(__name__)
 client = MongoClient('mongodb://mongodb:27017/')
@@ -50,6 +51,26 @@ def timeout_decorator(timeout):
         return wrapper
     return decorator
 
+@app.route('/users/create_with_game', methods=['POST'])
+@timeout_decorator(10)
+def create_user_with_game():
+    user_data = request.json.get('user')
+    game_data = {}
+
+    if not user_data:
+        return jsonify({"error": "Invalid request data"}), 400
+
+    saga = SagaCoordinator()
+    saga.add_step(create_user_step(user_data), delete_user_step(user_data))
+    saga.add_step(create_game_session_step(game_data), delete_game_session_step(game_data))
+    try:
+        saga.execute()
+        logMsg(f"User and game session created: {user_data['_id']}, {game_data['_id']}")
+        return jsonify({"message": "User and game session created successfully", "user_id": user_data['_id'], "game_id": game_data['_id']}), 201
+    except Exception as e:
+        logMsg(f"Failed to create user and game session: {e}")
+        return jsonify({"error": "Failed to create user and game session"}), 500
+    
 @app.route('/users/simulate-failure', methods=['GET'])
 def simulate_failure():
     try:
@@ -91,6 +112,16 @@ def get_user(user_id):
         return jsonify({"error": "User not found"}), 404
     logMsg(f"User retrieved: {user}")
     return jsonify(user), 200
+
+@app.route('/users/<user_id>', methods=['DELETE'])
+@timeout_decorator(3)
+def delete_user(user_id):
+    result = users_collection.delete_one({"_id": user_id})
+    if result.deleted_count == 0:
+        logMsg(f"User not found for deletion: {user_id}")
+        return jsonify({"error": "User not found"}), 404
+    logMsg(f"User deleted: {user_id}")
+    return jsonify({"message": "User deleted successfully"}), 200
 
 @app.route('/users', methods=['GET'])
 @timeout_decorator(3)
