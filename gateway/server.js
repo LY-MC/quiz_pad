@@ -1,15 +1,19 @@
 const redis = require("redis");
 const express = require("express");
 const axios = require("axios");
+const winston = require('winston');
 const rateLimit = require("express-rate-limit");
 let serviceIndexes = {};
 
 const app = express();
-
+app.use(express.json());
 const PORT = process.env.PORT || 5000;
 
 const MAX_RETRIES = process.env.MAX_RETRIES || 3;
-const MAX_REDIRECTS = process.env.MAX_REDIRECTS || 1;
+const MAX_REDIRECTS = process.env.MAX_REDIRECTS || 3;
+
+const LOGSTASH_HOST = process.env.LOGSTASH_HOST || "logstash";
+const LOGSTASH_HTTP_PORT = process.env.LOGSTASH_HTTP_PORT || 6000;
 
 const logWithFixedLabelWidth = (label, message, width = 25) => {
   const paddedLabel = label.padEnd(width, ' ');
@@ -27,7 +31,26 @@ const redisClient = redis.createClient({
 
 redisClient.connect().catch((err) => {
   console.error("Redis connection error:", err);
+  logMsg(`Redis connection error: ${err.message}`);
 });
+
+const logger = winston.createLogger({
+    transports: [
+        new winston.transports.Console(),
+        new winston.transports.Http({
+            host: LOGSTASH_HOST,
+            port: LOGSTASH_HTTP_PORT,
+            level: 'info',
+        })
+    ],
+});
+
+function logMsg(msg) {
+    logger.info(JSON.stringify({
+        "service": "gateway",
+        "msg": msg
+    }));
+}
 
 const cacheSetValue = async (key, value, timeout = null) => {
   try {
@@ -35,8 +58,10 @@ const cacheSetValue = async (key, value, timeout = null) => {
       EX: timeout
     });
     logWithFixedLabelWidth("cacheSetValue", `Successfully set ${key} to ${value}`);
+    logMsg(`Successfully set ${key} to ${value}`);
   } catch (err) {
     errorWithFixedLabelWidth("cacheSetValue", 'Error setting value:', err);
+    logMsg(`Error setting value for ${key}: ${err.message}`);
   }
 };
 
@@ -45,13 +70,16 @@ const cacheGetValue = async (key) => {
     const value = await redisClient.get(key);
     if (value) {
       logWithFixedLabelWidth("cacheGetValue", `Value for ${key}: ${value}`);
+      logMsg(`Value for ${key}: ${value}`);
       return value;
     } else {
       logWithFixedLabelWidth("cacheGetValue", `No value found for ${key}`);
+      logMsg(`No value found for ${key}`);
       return null;
     }
   } catch (err) {
-    errorWithFixedLabelWidth("cacheGetValue", 'Error setting value:', err.message);
+    errorWithFixedLabelWidth("cacheGetValue", 'Error getting value:', err.message);
+    logMsg(`Error getting value for ${key}: ${err.message}`);
     return null;
   }
 };
@@ -63,17 +91,21 @@ const cacheMiddleware = async (req, res, next) => {
 
   const cacheKey = req.originalUrl;
   logWithFixedLabelWidth("cacheMiddleware", `Checking cache for: ${cacheKey}`);
+  logMsg(`Checking cache for: ${cacheKey}`);
   try {
     const cachedData = await cacheGetValue(cacheKey);
 
     if (cachedData) {
       logWithFixedLabelWidth("cacheMiddleware", `Serving from cache for: ${cacheKey}`);
+      logMsg(`Serving from cache for: ${cacheKey}`);
       return res.status(200).json(JSON.parse(cachedData));
     } else {
       logWithFixedLabelWidth("cacheMiddleware", `Cache miss for: ${cacheKey}`);
+      logMsg(`Cache miss for: ${cacheKey}`);
     }
   } catch (err) {
     errorWithFixedLabelWidth("cacheMiddleware", "Cache error:", err.message);
+    logMsg(`Cache error for ${cacheKey}: ${err.message}`);
   }
   next();
 };
@@ -113,6 +145,7 @@ const getNextServiceInstance = async (serviceName, instances) => {
       serviceInstance = currentInstance;
     } else {
       logWithFixedLabelWidth("getNextServiceInstance", `Circuit for ${currentInstance.ip} is open. Skipping`);
+      logMsg(`Circuit for ${currentInstance.ip} is open. Skipping`);
     }
     
     instanceIndex = (instanceIndex + 1) % instances.length;
@@ -122,9 +155,12 @@ const getNextServiceInstance = async (serviceName, instances) => {
 
   if (serviceInstance === null) {
     logWithFixedLabelWidth("getNextServiceInstance", `No available instances for ${serviceName} (all circuits are open)`);
+    logMsg(`No available instances for ${serviceName} (all circuits are open)`);
     return null;
   }
 
+  logWithFixedLabelWidth("getNextServiceInstance", `Selected instance for ${serviceName} - ${serviceInstance.ip}`);
+  logMsg(`Selected instance for ${serviceName} - ${serviceInstance.ip}`);
   return serviceInstance;
 };
 
@@ -136,15 +172,17 @@ const getService = async (serviceName) => {
 
     if (serviceInstances.length === 0) {
       logWithFixedLabelWidth("getService", `No instances found for service: ${serviceName}`);
+      logMsg(`No instances found for service: ${serviceName}`);
       return null;
     }
 
     const nextServiceInstance = await getNextServiceInstance(serviceName, serviceInstances);
     logWithFixedLabelWidth("getService", `Selected instance for ${serviceName} - ${nextServiceInstance.ip}`);
-    
+    logMsg(`Selected instance for ${serviceName} - ${nextServiceInstance.ip}`);
     return nextServiceInstance;
   } catch (err) {
     errorWithFixedLabelWidth("getService", "Failed to get service:", err.message);
+    logMsg(`Failed to get service ${serviceName}: ${err.message}`);
     return null;
   }
 };
@@ -167,7 +205,8 @@ const requestWithRetries = async (url, method, data, headers, retries = MAX_RETR
     } 
     
     if (retries > 0 && error.response?.status >= 500) {
-      logWithFixedLabelWidth("requestWithRetries", `Retrying request to ${url}. Attempts left: ${retries}`)
+      logWithFixedLabelWidth("requestWithRetries", `Retrying request to ${url}. Attempts left: ${retries}`);
+      logMsg(`Retrying request to ${url}. Attempts left: ${retries}`);
       return await requestWithRetries(url, method, data, headers, retries - 1);
     } else {
       // Break the circuit for the failed service instance after maximum retries
@@ -175,6 +214,7 @@ const requestWithRetries = async (url, method, data, headers, retries = MAX_RETR
         const failedIp = new URL(url).hostname;
         await cacheSetValue(`circuit:${failedIp}`, '0');
         errorWithFixedLabelWidth("requestWithRetries", `Max retries reached, service at ${failedIp} is unavailable`, '');
+        logMsg(`Max retries reached, service at ${failedIp} is unavailable`);
       }
 
       throw lastError;
@@ -192,6 +232,7 @@ const redirectRequest = async (serviceName, method, endpoint, data, headers, max
 
     if (!service) {
       errorWithFixedLabelWidth("redirectRequest", `No available ${serviceName} instances`, '');
+      logMsg(`No available ${serviceName} instances`);
       throw new Error(`No available ${serviceName} instances`);
     }
 
@@ -207,11 +248,12 @@ const redirectRequest = async (serviceName, method, endpoint, data, headers, max
     } catch (error) {
       lastError = error;
       errorWithFixedLabelWidth("redirectRequest", `Request to ${service.ip}:${service.port} failed, redirecting. Redirects left: ${maxRedirects - currentRedirects - 1}`, '');
+      logMsg(`Request to ${service.ip}:${service.port} failed, redirecting. Redirects left: ${maxRedirects - currentRedirects - 1}`);
       currentRedirects++;
     }
   }
 
-  throw new Error(`${currentRedirects} instances of ${serviceName} failed to procees the request`)
+  throw new Error(`${currentRedirects} instances of ${serviceName} failed to process the request`);
 };
 
 app.use("/users", cacheMiddleware, async (req, res, next) => {
@@ -221,6 +263,7 @@ app.use("/users", cacheMiddleware, async (req, res, next) => {
     res.json(response.data);
   } catch (err) {
     errorWithFixedLabelWidth("usersRoute", "Request failed:", err.message);
+    logMsg(`Request to user_management_service failed: ${err.message}`);
     res.status(503).json({ message: `Unable to process the request`, last_error: err.message });
   }
 });
@@ -231,12 +274,14 @@ app.use("/game", cacheMiddleware, async (req, res, next) => {
     res.json(response.data);
   } catch (err) {
     errorWithFixedLabelWidth("gameRoute", "Request failed:", err.message);
+    logMsg(`Request to game_engine_service failed: ${err.message}`);
     res.status(503).json({ message: `Unable to process the request`, last_error: err.message });
   }
 });
 
 app.get("/status", (req, res) => {
   res.json({ status: "Gateway is up and running!" });
+  logMsg("Gateway status checked: up and running");
 });
 
 const registerService = async () => {
@@ -250,13 +295,16 @@ const registerService = async () => {
       }
     );
     console.log("Service registered successfully:", response.data);
+    logMsg("Service registered successfully");
   } catch (err) {
     console.error("Failed to register service:", err);
-    setTimeout(registerService, 5000); // Retry after 5 seconds
+    logMsg(`Failed to register service: ${err.message}`);
+    setTimeout(registerService, 5000); 
   }
 };
 
 app.listen(PORT, () => {
   console.log(`Gateway listening on port ${PORT}`);
+  logMsg(`Gateway listening on port ${PORT}`);
   registerService();
 });

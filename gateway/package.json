@@ -10,7 +10,8 @@
     "express": "^4.17.1",
     "redis": "^4.6.7",
     "axios": "^0.21.1",
-    "express-rate-limit": "^6.7.0"
+    "express-rate-limit": "^6.7.0",
+    "winston": "^3.3.3"
   },
   "private": true
 }

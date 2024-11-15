@@ -30,3 +30,6 @@ venv/
 
 local_dump
 data
+
+.idea
+.vscode

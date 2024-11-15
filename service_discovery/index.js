@@ -1,6 +1,26 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const axios = require('axios');
+const winston = require('winston');
+const LOGSTASH_HOST = process.env.LOGSTASH_HOST || "logstash";
+const LOGSTASH_HTTP_PORT = process.env.LOGSTASH_HTTP_PORT || 6000;
+
+const logger = winston.createLogger({
+  transports: [
+      new winston.transports.Console(),
+      new winston.transports.Http({
+          host: LOGSTASH_HOST,
+          port: LOGSTASH_HTTP_PORT,
+          level: 'info',
+      })
+  ],
+});
+
+function logMsg(msg) {
+  logger.info(JSON.stringify({
+      "service": "service_discovery",
+      "msg": msg
+  }));
+}
 
 class ServiceRegistry {
   constructor() {
@@ -16,11 +36,13 @@ class ServiceRegistry {
       timestamp: Date.now(),
     };
     console.log(`Registered service: ${name} at ${ip}:${port}`);
+    logMsg(`Registered service: ${name} at ${ip}:${port}`);
   }
 
   unregisterService(serviceKey) {
     if (this.services[serviceKey]) {
       console.log(`Unregistering service: ${serviceKey}`);
+      logMsg(`Unregistering service: ${serviceKey}`);
       delete this.services[serviceKey];
     }
   }
@@ -62,34 +84,32 @@ app.post('/register', (req, res) => {
   if (name && ip && port) {
     registry.registerService(name, ip, port);
     res.status(200).send('Service registered successfully');
+    logMsg(`Service registered successfully: ${name} at ${ip}:${port}`);
   } else {
     res.status(400).send('Invalid request data');
+    logMsg('Invalid request data for service registration');
   }
 });
 
-// Health check endpoint for the service discovery server itself
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'UP' });
+  logMsg('Health check endpoint called');
 });
 
-// Endpoint to see all registered services
 app.get('/services', (req, res) => {
   res.json(registry.getAllServices());
+  logMsg('Retrieved all registered services');
 });
 
 app.get('/status', (req, res) => {
   res.status(200).json({
     status: 'Service discovery is up and running',
   });
+  logMsg('Status endpoint called');
 });
 
-// // Clean up old services and ping registered services periodically
-// setInterval(() => {
-//   registry.pingServices();
-// }, 60 * 1000); // Ping services every 1 minute
-
-// Start the service discovery server
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Service Discovery running on port ${PORT}`);
+  logMsg(`Service Discovery running on port ${PORT}`);
 });

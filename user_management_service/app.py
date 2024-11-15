@@ -1,17 +1,37 @@
 from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from functools import wraps
-from collections import deque
-from datetime import datetime, timedelta
 import uuid
 import time
 import signal
 import os
+import logging
+import requests
 
 app = Flask(__name__)
 client = MongoClient('mongodb://mongodb:27017/')
 db = client['users_game_db']
 users_collection = db['users']
+
+LOGSTASH_HOST = os.getenv('LOGSTASH_HOST', 'logstash')
+LOGSTASH_HTTP_PORT = int(os.getenv('LOGSTASH_HTTP_PORT', 6000))
+
+logger = logging.getLogger('user_management_service')
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+def logMsg(msg):
+    logger.info(msg)
+    try:
+        requests.post(f'http://{LOGSTASH_HOST}:{LOGSTASH_HTTP_PORT}', json={
+            "service": "user_management_service",
+            "msg": msg
+        })
+    except Exception as e:
+        logger.error(f"Failed to send log to Logstash: {e}")
 
 class TimeoutException(Exception):
     pass
@@ -30,7 +50,6 @@ def timeout_decorator(timeout):
         return wrapper
     return decorator
 
-
 @app.route('/users/simulate-failure', methods=['GET'])
 def simulate_failure():
     try:
@@ -40,11 +59,13 @@ def simulate_failure():
         else:
             return jsonify({"message": f"{os.getenv('SERVICE_ADDRESS')} managed not to fail"}), 200
     except Exception as e:
+        logMsg(f"Simulate failure error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users/status', methods=['GET'])
 @timeout_decorator(3)
 def status():
+    logMsg("Status endpoint called")
     return jsonify({
         "status": "Service is running",
         "service": "User Management Service",
@@ -58,6 +79,7 @@ def register_user():
     user_data = request.json
     user_data['_id'] = str(uuid.uuid4())
     users_collection.insert_one(user_data)
+    logMsg(f"User registered: {user_data}")
     return jsonify({"message": "User registered successfully", "user": user_data}), 201
 
 @app.route('/users/<user_id>', methods=['GET'])
@@ -65,19 +87,23 @@ def register_user():
 def get_user(user_id):
     user = users_collection.find_one({"_id": user_id})
     if not user:
+        logMsg(f"User not found: {user_id}")
         return jsonify({"error": "User not found"}), 404
+    logMsg(f"User retrieved: {user}")
     return jsonify(user), 200
 
 @app.route('/users', methods=['GET'])
 @timeout_decorator(3)
 def get_all_users():
-    # time.sleep(500)
     users = list(users_collection.find())
+    logMsg(f"All users retrieved: {users}")
     return jsonify(users), 200
 
 @app.route('/health', methods=['GET'])
 def health():
+    logMsg("Health check endpoint called")
     return "OK", 200
 
 if __name__ == '__main__':
+    logMsg("User Management Service starting")
     app.run(host='0.0.0.0', port=5002)
