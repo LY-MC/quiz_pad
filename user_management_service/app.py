@@ -50,26 +50,6 @@ def timeout_decorator(timeout):
                 signal.alarm(0)
         return wrapper
     return decorator
-
-@app.route('/users/create_with_game', methods=['POST'])
-@timeout_decorator(10)
-def create_user_with_game():
-    user_data = request.json.get('user')
-    game_data = {}
-
-    if not user_data:
-        return jsonify({"error": "Invalid request data"}), 400
-
-    saga = SagaCoordinator()
-    saga.add_step(create_user_step(user_data), delete_user_step(user_data))
-    saga.add_step(create_game_session_step(game_data), delete_game_session_step(game_data))
-    try:
-        saga.execute()
-        logMsg(f"User and game session created: {user_data['_id']}, {game_data['_id']}")
-        return jsonify({"message": "User and game session created successfully", "user_id": user_data['_id'], "game_id": game_data['_id']}), 201
-    except Exception as e:
-        logMsg(f"Failed to create user and game session: {e}")
-        return jsonify({"error": "Failed to create user and game session"}), 500
     
 @app.route('/users/simulate-failure', methods=['GET'])
 def simulate_failure():

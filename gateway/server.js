@@ -15,6 +15,9 @@ const MAX_REDIRECTS = process.env.MAX_REDIRECTS || 3;
 const LOGSTASH_HOST = process.env.LOGSTASH_HOST || "logstash";
 const LOGSTASH_HTTP_PORT = process.env.LOGSTASH_HTTP_PORT || 6000;
 
+const { SagaCoordinator, createUserStep, deleteUserStep, createGameSessionStep, deleteGameSessionStep } = require('./saga_coordinator');
+
+
 const logWithFixedLabelWidth = (label, message, width = 25) => {
   const paddedLabel = label.padEnd(width, ' ');
   console.log(`${paddedLabel}| ${message}`);
@@ -51,6 +54,26 @@ function logMsg(msg) {
         "msg": msg
     }));
 }
+
+app.post('/users/create_with_game', async (req, res) => {
+  const userData = req.body.user;
+  const gameData = {};
+
+  if (!userData) {
+      return res.status(400).json({ error: "Invalid request data" });
+  }
+
+  const saga = new SagaCoordinator();
+  saga.addStep(createUserStep(userData), deleteUserStep(userData));
+  saga.addStep(createGameSessionStep(gameData), deleteGameSessionStep(gameData));
+
+  try {
+      await saga.execute();
+      res.status(201).json({ message: "User and game session created successfully", user_id: userData._id, game_id: gameData._id });
+  } catch (e) {
+      res.status(500).json({ error: "Failed to create user and game session" });
+  }
+});
 
 const cacheSetValue = async (key, value, timeout = null) => {
   try {
