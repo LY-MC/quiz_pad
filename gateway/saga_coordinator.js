@@ -35,21 +35,21 @@ class SagaCoordinator {
 }
 
 const createUserStep = (userData) => async () => {
-    const response = await axios.post('http://gateway:5000/users/user/register', userData);
+    const response = await axios.post('http://user_management_service_1:5002/users/user/register', userData);
     userData._id = response.data.user._id;
 };
 
 const deleteUserStep = (userData) => async () => {
-    await axios.delete(`http://gateway:5000/users/${userData._id}`);
+    await axios.delete(`http://user_management_service_1:5002/users/${userData._id}`);
 };
 
 const createGameSessionStep = (gameData) => async () => {
-    const response = await axios.post('http://gateway:5000/game/start-game', gameData);
+    const response = await axios.post('http://game_engine_service_1:5003/game/start-game', gameData);
     gameData._id = response.data.game._id;
 };
 
 const deleteGameSessionStep = (gameData) => async () => {
-    await axios.delete(`http://gateway:5000/game/${gameData._id}`);
+    await axios.delete(`http://game_engine_service_1:5003/game/${gameData._id}`);
 };
 
 module.exports = {

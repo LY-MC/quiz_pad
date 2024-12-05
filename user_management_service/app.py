@@ -7,7 +7,6 @@ import signal
 import os
 import logging
 import requests
-from saga_coordinator import SagaCoordinator, create_user_step, create_game_session_step, delete_user_step, delete_game_session_step
 
 app = Flask(__name__)
 client = MongoClient('mongodb://mongodb:27017/')
