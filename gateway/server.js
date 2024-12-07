@@ -1,4 +1,4 @@
-const redis = require("redis");
+const Redis = require("ioredis");
 const express = require("express");
 const axios = require("axios");
 const winston = require('winston');
@@ -28,11 +28,20 @@ const errorWithFixedLabelWidth = (label, error1, error2, width = 25) => {
   console.error(`${paddedLabel}|`, error1, error2);
 };
 
-const redisClient = redis.createClient({
-  url: "redis://gateway_cache:6379",
+const redisClient = new Redis.Cluster([
+  { port: 6379, host: 'redis-node-1' },
+  { port: 6380, host: 'redis-node-2' },
+  { port: 6381, host: 'redis-node-3' },
+  { port: 6382, host: 'redis-node-4' },
+  { port: 6383, host: 'redis-node-5' },
+  { port: 6384, host: 'redis-node-6' }
+]);
+
+redisClient.on("connect", () => {
+  console.log("Connected to Redis cluster");
 });
 
-redisClient.connect().catch((err) => {
+redisClient.on("error", (err) => {
   console.error("Redis connection error:", err);
   logMsg(`Redis connection error: ${err.message}`);
 });
@@ -77,9 +86,11 @@ app.post('/users/create_with_game', async (req, res) => {
 
 const cacheSetValue = async (key, value, timeout = null) => {
   try {
-    await redisClient.set(key, value, {
-      EX: timeout
-    });
+    if (timeout) {
+      await redisClient.set(key, value, 'EX', timeout);
+    } else {
+      await redisClient.set(key, value);
+    }
     logWithFixedLabelWidth("cacheSetValue", `Successfully set ${key} to ${value}`);
     logMsg(`Successfully set ${key} to ${value}`);
   } catch (err) {
@@ -115,22 +126,49 @@ const cacheMiddleware = async (req, res, next) => {
   const cacheKey = req.originalUrl;
   logWithFixedLabelWidth("cacheMiddleware", `Checking cache for: ${cacheKey}`);
   logMsg(`Checking cache for: ${cacheKey}`);
-  try {
-    const cachedData = await cacheGetValue(cacheKey);
 
-    if (cachedData) {
-      logWithFixedLabelWidth("cacheMiddleware", `Serving from cache for: ${cacheKey}`);
-      logMsg(`Serving from cache for: ${cacheKey}`);
-      return res.status(200).json(JSON.parse(cachedData));
-    } else {
-      logWithFixedLabelWidth("cacheMiddleware", `Cache miss for: ${cacheKey}`);
-      logMsg(`Cache miss for: ${cacheKey}`);
+  const maxRetries = 5;
+  let retries = 0;
+
+  while (retries < maxRetries) {
+    try {
+      const cachedData = await cacheGetValue(cacheKey);
+
+      if (cachedData) {
+        logWithFixedLabelWidth("cacheMiddleware", `Serving from cache for: ${cacheKey}`);
+        logMsg(`Serving from cache for: ${cacheKey}`);
+        return res.status(200).json(JSON.parse(cachedData));
+      } else {
+        logWithFixedLabelWidth("cacheMiddleware", `Cache miss for: ${cacheKey}`);
+        logMsg(`Cache miss for: ${cacheKey}`);
+        break;
+      }
+    } catch (err) {
+      retries++;
+      errorWithFixedLabelWidth("cacheMiddleware", `Cache error (attempt ${retries}):`, err.message);
+      logMsg(`Cache error for ${cacheKey} (attempt ${retries}): ${err.message}`);
+      if (retries >= maxRetries) {
+        logWithFixedLabelWidth("cacheMiddleware", `Max retries reached for: ${cacheKey}`);
+        logMsg(`Max retries reached for: ${cacheKey}`);
+        break;
+      }
     }
-  } catch (err) {
-    errorWithFixedLabelWidth("cacheMiddleware", "Cache error:", err.message);
-    logMsg(`Cache error for ${cacheKey}: ${err.message}`);
   }
-  next();
+
+  const serviceName = req.originalUrl.startsWith('/users') ? 'user_management_service' : 'game_engine_service';
+
+  try {
+    const response = await redirectRequest(serviceName, req.method, req.originalUrl, req.body, req.headers);
+    res.json(response.data);
+  } catch (err) {
+    errorWithFixedLabelWidth("serviceRoute", "Request failed:", err.message);
+    logMsg(`Request to ${serviceName} failed: ${err.message}`);
+    if (err.message.includes(`No available ${serviceName} instances`)) {
+      res.status(503).json({ message: `${serviceName.replace('_', ' ')} is currently unavailable. Please try again later.` });
+    } else {
+      res.status(503).json({ message: `Unable to process the request`, last_error: err.message });
+    }
+  }
 };
 
 const shouldCache = (endpoint, responseCode) => {

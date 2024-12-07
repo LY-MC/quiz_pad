@@ -6,8 +6,10 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - redis
+      - redis-cluster-init-node
       - service_discovery
+    networks:
+      - app-network
 
   service_discovery:
     build:
@@ -17,6 +19,8 @@ services:
       - "3000:3000"
     volumes:
       - service_discovery-data:/app/logs
+    networks:
+      - app-network
 
   mongodb:
     image: mongo:latest
@@ -25,6 +29,8 @@ services:
       - "27019:27017"
     volumes:
       - mongo_data:/data/db
+    networks:
+      - app-network
 
   gamesdb:
     image: mongo:latest
@@ -33,6 +39,8 @@ services:
       - "27018:27017"
     volumes:
       - gamesdb_data:/data/db
+    networks:
+      - app-network
 
   user_management_service_1:
     container_name: user_management_service_1
@@ -48,6 +56,8 @@ services:
       SERVICE_ADDRESS: user_management_service_1
       PORT: 5002
       FAIL: 1
+    networks:
+      - app-network
     command: sh -c "node registerService.js & gunicorn -w 4 --threads 2 -b 0.0.0.0:5002 app:app"
 
   user_management_service_2:
@@ -64,6 +74,8 @@ services:
       SERVICE_ADDRESS: user_management_service_2
       PORT: 5003
       FAIL: 1
+    networks:
+      - app-network
     command: sh -c "node registerService.js & gunicorn -w 4 --threads 2 -b 0.0.0.0:5002 app:app"
 
   user_management_service_3:
@@ -80,6 +92,8 @@ services:
       SERVICE_ADDRESS: user_management_service_3
       PORT: 5004
       FAIL: 0
+    networks:
+      - app-network
     command: sh -c "node registerService.js & gunicorn -w 4 --threads 2 -b 0.0.0.0:5002 app:app"
 
   game_engine_service_1:
@@ -96,6 +110,8 @@ services:
       SERVICE_ADDRESS: game_engine_service_1
       PORT: 5005
       FAIL: 1
+    networks:
+      - app-network
     command: sh -c "node registerService.js & gunicorn -k eventlet --timeout 60 -w 5 -b 0.0.0.0:5003 app:app"
 
   game_engine_service_2:
@@ -112,6 +128,8 @@ services:
       SERVICE_ADDRESS: game_engine_service_2
       PORT: 5006
       FAIL: 1
+    networks:
+      - app-network
     command: sh -c "node registerService.js & gunicorn -k eventlet --timeout 60 -w 5 -b 0.0.0.0:5003 app:app"  
 
   game_engine_service_3:
@@ -128,14 +146,104 @@ services:
       SERVICE_ADDRESS: game_engine_service_3
       PORT: 5006
       FAIL: 1
+    networks:
+      - app-network
     command: sh -c "node registerService.js & gunicorn -k eventlet --timeout 60 -w 5 -b 0.0.0.0:5003 app:app"  
 
-  redis:
-    container_name: gateway_cache
-    image: redis:alpine
+  redis-node-1:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-1
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    tmpfs:
+      - /bitnami/redis
+      
+  redis-node-2:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-2
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
     ports:
       - "6380:6379"
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - app-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-3:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-3
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6381:6379"
+    networks:
+      - app-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-4:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-4
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6382:6379"
+    networks:
+      - app-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-5:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-5
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6383:6379"
+    networks:
+      - app-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-6:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-6
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6384:6379"
+    networks:
+      - app-network
+    tmpfs:
+      - /bitnami/redis
+      
+  redis-cluster-init-node:
+    container_name: redis-cluster-init-node
+    image: bitnami/redis-cluster:latest
+    entrypoint: >
+      /bin/bash -c '
+      until redis-cli -h redis-node-1 -p 6379 ping; do sleep 1; done &&
+      redis-cli --cluster create redis-node-1:6379 redis-node-2:6379 redis-node-3:6379 redis-node-4:6379 redis-node-5:6379 redis-node-6:6379 --cluster-replicas 1 --cluster-yes'
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+      - redis-node-5
+      - redis-node-6
+    networks:
+      - app-network
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.10.1
@@ -148,6 +256,8 @@ services:
       - "9300:9300"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - app-network
 
   logstash:
     image: docker.elastic.co/logstash/logstash:7.14.0
@@ -159,6 +269,8 @@ services:
       - "9600:9600"
     depends_on:
       - elasticsearch
+    networks:
+      - app-network
 
   kibana:
     image: docker.elastic.co/kibana/kibana:7.10.1
@@ -169,6 +281,8 @@ services:
       - "5601:5601"
     depends_on:
       - elasticsearch
+    networks:
+      - app-network
 
   filebeat:
     image: docker.elastic.co/beats/filebeat:8.15.3
@@ -178,9 +292,16 @@ services:
       - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml
     depends_on:
       - logstash
+    networks:
+      - app-network
 
 volumes:
   mongo_data: {}
   gamesdb_data: {}
   elasticsearch-data: {}
   service_discovery-data: {}
+  redis-cluster-data: {}
+
+networks:
+  app-network:
+    driver: bridge
